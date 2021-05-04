@@ -1,0 +1,123 @@
+
+module load bioinfo
+module load Qiime/2-2020.11
+
+qiime dada2 denoise-pyro \
+  --i-demultiplexed-seqs ./qiime_out/demux.qza \
+  --p-trim-left 15 \
+  --p-trunc-len 400 \
+  --p-trunc-q 10 \
+  --p-max-len 700 \
+  --o-representative-sequences ./qiime_out/rep-seqs.qza \
+  --o-table ./qiime_out/table.qza \
+  --o-denoising-stats ./qiime_out/stats-dada2.qza
+
+#Convert .qza to .qzv format
+
+qiime metadata tabulate \
+  --m-input-file ./qiime_out/stats-dada2.qza \
+  --o-visualization ./qiime_out/stats-dada2.qzv
+
+qiime feature-table tabulate-seqs \
+  --i-data ./qiime_out/rep-seqs.qza \
+  --o-visualization ./qiime_out/rep-seqs.qzv
+
+#Create a .qzv from the output of denoise
+qiime feature-table summarize \
+  --i-table ./qiime_out/table.qza \
+  --o-visualization ./qiime_out/table.qzv \
+  --m-sample-metadata-file project_metadata.txt
+
+qiime diversity alpha-rarefaction \
+  --i-table ./qiime_out/table.qza \
+  --i-phylogeny ./qiime_out/rooted-tree.qza \
+  --p-max-depth 2000 \
+  --m-metadata-file project_metadata.txt \
+  --o-visualization ./qiime_out/alpha-rarefaction.qzv
+
+echo "Create a phylogenetic tree. (Phylogenetic method)"
+qiime phylogeny align-to-tree-mafft-fasttree \
+  --i-sequences ./qiime_out2/rep-seqs.qza \
+  --o-alignment ./qiime_out2/aligned-rep-seqs.qza \
+  --o-masked-alignment ./qiime_out2/masked-aligned-rep-seqs.qza \
+  --o-tree ./qiime_out2/unrooted-tree.qza \
+  --o-rooted-tree ./qiime_out2/rooted-tree.qza
+
+qiime diversity core-metrics-phylogenetic \
+  --i-phylogeny ./qiime_out2/rooted-tree.qza \
+  --i-table ./qiime_out2/table.qza \
+  --p-sampling-depth 2376 \
+  --m-metadata-file project_metadata.txt \
+  --output-dir ./qiime_out2/core-metrics-results
+
+
+
+V5–V3 region
+357F - CCTACGGGAGGCAGCAG
+926R - CCGTCAATTCMTTTRAGT
+
+
+wget https://data.qiime2.org/2020.11/common/silva-138-99-seqs.qza
+wget https://data.qiime2.org/2020.11/common/silva-138-99-tax.qza
+
+qiime feature-classifier extract-reads \
+--i-sequences silva-138-99-seqs.qza \
+--p-f-primer CCTACGGGAGGCAGCAG \   
+--p-r-primer CCGTCAATTCMTTTRAGT \  
+--p-min-length 100  \   
+--p-max-length 700 \    
+--p-n-jobs 12 \
+--o-reads ref-seqs-v5_3.qza 
+
+qiime feature-classifier fit-classifier-naive-bayes \
+--i-reference-reads ref-seqs-v5_3.qza \
+--i-reference-taxonomy silva-138-99-tax.qza \
+--o-classifier silva-classifier-v5_3.qza
+
+
+# Making a LEFSe input
+qiime taxa collapse \
+--i-table table.qza \
+--o-collapsed-table collapse.table.qza \
+--p-level 6 \
+--i-taxonomy taxonomy.qza
+
+qiime feature-table relative-frequency \
+--i-table collapse.table.qza \
+--o-relative-frequency-table collapse.frequency.table.qza \
+--output-dir collapse.frequency/
+
+qiime tools export \
+--input-path collapse.frequency.table.qza \
+--output-path collapse.frequency/
+
+biom convert \
+-i collapse.frequency/feature-table.biom \
+-o collapse.frequency/collapse.frequency.table.txt \
+--header-key “taxonomy” --to-tsv
+
+
+# With new classification of mode_delivery
+qiime diversity alpha-rarefaction \
+  --i-table ./qiime_out/table.qza \
+  --i-phylogeny ./qiime_out/rooted-tree.qza \
+  --p-max-depth 2000 \
+  --m-metadata-file project_metadata.txt \
+  --o-visualization ./qiime_out/alpha-rarefaction.qzv
+
+qiime diversity core-metrics-phylogenetic \
+  --i-phylogeny ./qiime_out/rooted-tree.qza \
+  --i-table ./qiime_out/table.qza \
+  --p-sampling-depth 2376 \
+  --m-metadata-file project_metadata.txt \
+  --output-dir ./qiime_out/core-metrics-results
+
+# Taxonomy
+qiime feature-classifier classify-sklearn \
+  --i-classifier ../claasifier/silva-classifier-v5_3.qza \
+  --i-reads ./rep-seqs.qza \
+  --o-classification taxonomy.qza
+
+qiime metadata tabulate \
+  --m-input-file taxonomy.qza \
+  --o-visualization taxonomy.qzv  ##Convert to .qzv
